@@ -43,6 +43,7 @@ import time
 import os
 import datetime
 import array
+from sys import platform
 
 ## change these (if you need to)
 audio_tx_rate = 11521
@@ -50,22 +51,6 @@ audio_rx_rate = 7812
 trusdx_mute = True
 vox_mode = False
 debug = True
-
-from sys import platform
-if platform == "linux" or platform == "linux2":
-    virtual_audio_dev_out = ""#"Loopback"#"TRUSDX"
-    virtual_audio_dev_in  = ""#"Loopback"#"TRUSDX"
-    trusdx_serial_dev     = "USB Serial"
-    loopback_serial_dev   = "/tmp/ttyS1"
-elif platform == "win32":
-    virtual_audio_dev_out = "CABLE Output"
-    virtual_audio_dev_in  = "CABLE Input"
-    trusdx_serial_dev     = "CH340"
-    #loopback_serial_dev   = "com0com"
-    loopback_serial_dev   = "COM9"
-elif platform == "darwin":
-    print("TBD")
-    # OS X
 ## 
 
 buf = []    # buffer for received audio
@@ -183,16 +168,44 @@ def transmit_audio_via_serial_cat(pastream, serport, catport):
         else:
             time.sleep(0.001)
 
+def pty_echo(fd1, fd2):
+    while 1:
+        c1 = fd1.read(1)
+        fd2.write(c1)
+        #print(f'{datetime.datetime.utcnow()} {threading.current_thread().ident} > ', c1)
+
 def main():
+    if platform == "linux" or platform == "linux2":
+       virtual_audio_dev_out = ""#"Loopback"#"TRUSDX"
+       virtual_audio_dev_in  = ""#"Loopback"#"TRUSDX"
+       trusdx_serial_dev     = "USB Serial"
+       loopback_serial_dev   = "/tmp/ttyS1"
+    elif platform == "win32":
+       virtual_audio_dev_out = "CABLE Output"
+       virtual_audio_dev_in  = "CABLE Input"
+       trusdx_serial_dev     = "CH340"
+       #loopback_serial_dev   = "com0com"
+       loopback_serial_dev   = "COM9"
+    elif platform == "darwin":
+       log("TBD OS X")
+
     show_audio_devices()
     print("Audio device = ", find_audio_device(virtual_audio_dev_in), find_audio_device(virtual_audio_dev_out) )
     show_serial_devices()
     print("Serial device = ", find_serial_device(trusdx_serial_dev) )
-    print("Serial loopback = ", find_serial_device(loopback_serial_dev) )
 
-    #   master, slave = os.openpty()
-    #   print(os.ttyname(slave))
-    #   ser2 = serial.Serial(os.ttyname(master), 115200, write_timeout = 0)
+    if platform == "linux" or platform == "linux2":
+       _master1, slave1 = os.openpty()  # Make a tty <-> tty device where one end is opened as serial device, other end by CAT app
+       _master2, slave2 = os.openpty()
+       master1 = os.fdopen(_master1, 'rb+', 0)
+       master2 = os.fdopen(_master2, 'rb+', 0)
+       print(f'CAT loopback = {os.ttyname(slave1)}')
+       threading.Thread(target=pty_echo, args=(master1,master2)).start()
+       threading.Thread(target=pty_echo, args=(master2,master1)).start()
+       os.ttyname(slave1)
+       loopback_serial_dev = os.ttyname(slave2)
+
+    print("Serial loopback = ", find_serial_device(loopback_serial_dev) )
     ser2 = serial.Serial(loopback_serial_dev, 115200, write_timeout = 0)
     #    ser2 = serial.Serial(find_serial_device(loopback_serial_dev), 115200, write_timeout = 0)
 
