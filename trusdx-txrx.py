@@ -55,7 +55,7 @@ debug = True
 
 buf = []    # buffer for received audio
 urs = [0]   # underrun counter
-status = [False, False]	# tx_state, cat_streaming_state
+status = [False, False, True]	# tx_state, cat_streaming_state, running
 chunksize = 512
 
 def log(msg):
@@ -66,6 +66,7 @@ def show_audio_devices():
         print(pyaudio.PyAudio().get_device_info_by_index(i))
     for i in range(pyaudio.PyAudio().get_host_api_count()):
         print(pyaudio.PyAudio().get_host_api_info_by_index(i))
+        
 def find_audio_device(name, occurance = 0):
     if platform == "linux" or platform == "linux2": return -1  # not supported
     result = [i for i in range(pyaudio.PyAudio().get_device_count()) if name in (pyaudio.PyAudio().get_device_info_by_index(i)['name']) ]
@@ -80,52 +81,66 @@ def find_serial_device(name, occurance = 0):
     return result[occurance] if len(result) else "" # return n-th matching device to name, "" for no match
 
 def receive_serial_audio(serport, catport):
-    while True:
-        d = serport.read_until(b";", chunksize)   # read until CAT end or enough in buf
-        if status[1]:
-            #log(f"stream: {d}")
-            buf.append(d)                   # in CAT streaming mode: fwd to audio buf
-            if d[-1] == ord(';'):
-                status[1] = False           # go to CAT cmd mode when data ends with ';'
-                #log("***CAT mode")
-        else:
-            if d.startswith(b'US'):
-                #log("***US mode")
-                status[1] = True            # go to CAT stream mode when data starts with US
+    try:
+        log("receive_serial_audio")
+        while status[2]:
+            d = serport.read_until(b";", chunksize)   # read until CAT end or enough in buf
+            if status[1]:
+                #log(f"stream: {d}")
+                buf.append(d)                   # in CAT streaming mode: fwd to audio buf
+                if d[-1] == ord(';'):
+                    status[1] = False           # go to CAT cmd mode when data ends with ';'
+                    #log("***CAT mode")
             else:
-                catport.write(d)
-                catport.flush()
-                log(f"O: {d}")  # in CAT command mode
+                if d.startswith(b'US'):
+                    #log("***US mode")
+                    status[1] = True            # go to CAT stream mode when data starts with US
+                else:
+                    catport.write(d)
+                    catport.flush()
+                    log(f"O: {d}")  # in CAT command mode
+    except Exception as e:
+        log(e)
+        status[2] = False
 
 def play_receive_audio(pastream):
-    while True:
-        if len(buf) < 2:
-            #log(f"UNDERRUN #{urs[0]} - refilling")
-            urs[0] += 1
-            while len(buf) < 10:
-                time.sleep(0.01)
-        if not status[0]: pastream.write(buf[0])
-        buf.remove(buf[0])
+    try:
+        log("play_receive_audio")
+        while status[2]:
+            if len(buf) < 2:
+                #log(f"UNDERRUN #{urs[0]} - refilling")
+                urs[0] += 1
+                while len(buf) < 10:
+                    time.sleep(0.01)
+            if not status[0]: pastream.write(buf[0])
+            buf.remove(buf[0])
+    except Exception as e:
+        log(e)
+        status[2] = False
 
 def transmit_audio_via_serial_vox(pastream, serport, catport):
-    log("transmit_audio_via_serial_vox")
-    while True:
-        samples = pastream.read(chunksize, exception_on_overflow = False)
-        samplesa = array.array('h', samples)
-        samples8 = bytearray([128 + x//512 for x in samplesa])  # Win7 only support 16 bits input audio -> convert to 8 bits
-        #log(f"{128 - min(samples8)} {max(samples8) - 127}")
-        if (128 - min(samples8)) == 64 and (max(samples8) - 127) == 64: # if does contain very loud signal
-            if not status[0]:
-                status[0] = True
-                log("TX ON")
-                serport.write(b"UA2;TX0;")
-            if status[0]:
-                serport.write(samples8)
-        elif status[0]:  # in TX and no audio detected (silence)
-            time.sleep(0.1)
-            serport.write(b";RX;")
-            status[0] = False
-            log("TX OFF")
+    try:
+        log("transmit_audio_via_serial_vox")
+        while status[2]:
+            samples = pastream.read(chunksize, exception_on_overflow = False)
+            samplesa = array.array('h', samples)
+            samples8 = bytearray([128 + x//512 for x in samplesa])  # Win7 only support 16 bits input audio -> convert to 8 bits
+            #log(f"{128 - min(samples8)} {max(samples8) - 127}")
+            if (128 - min(samples8)) == 64 and (max(samples8) - 127) == 64: # if does contain very loud signal
+                if not status[0]:
+                    status[0] = True
+                    log("TX ON")
+                    serport.write(b"UA2;TX0;")
+                if status[0]:
+                    serport.write(samples8)
+            elif status[0]:  # in TX and no audio detected (silence)
+                time.sleep(0.1)
+                serport.write(b";RX;")
+                status[0] = False
+                log("TX OFF")
+    except Exception as e:
+        log(e)
+        status[2] = False
 
 def forward_cat(pastream, serport, catport):
     if(catport.inWaiting()):
@@ -155,81 +170,127 @@ def forward_cat(pastream, serport, catport):
            #log("***RX mode")
 
 def transmit_audio_via_serial_cat(pastream, serport, catport):
-    log("transmit_audio_via_serial_cat")
-    while True:
-        forward_cat(pastream, serport, catport)
-        if status[0] and pastream.get_read_available() > 0:    # in TX mode, and audio available
-            samples = pastream.read(chunksize, exception_on_overflow = False)
-            if status[0]:
-               arr = array.array('h', samples)
-               samples8 = bytearray([128 + x//512 for x in arr])  # Win7 only support 16 bits input audio -> convert to 8 bits
-               samples8 = samples8.replace(b'\x3b', b'\x3a')      # filter ; of stream
-               serport.write(samples8)
-        else:
-            time.sleep(0.001)
+    try:
+        log("transmit_audio_via_serial_cat")
+        while status[2]:
+            forward_cat(pastream, serport, catport)
+            if status[0] and pastream.get_read_available() > 0:    # in TX mode, and audio available
+                samples = pastream.read(chunksize, exception_on_overflow = False)
+                if status[0]:
+                   arr = array.array('h', samples)
+                   samples8 = bytearray([128 + x//512 for x in arr])  # Win7 only support 16 bits input audio -> convert to 8 bits
+                   samples8 = samples8.replace(b'\x3b', b'\x3a')      # filter ; of stream
+                   serport.write(samples8)
+            else:
+                time.sleep(0.001)
+    except Exception as e:
+        log(e)
+        status[2] = False
 
 def pty_echo(fd1, fd2):
-    while 1:
-        c1 = fd1.read(1)
-        fd2.write(c1)
-        #print(f'{datetime.datetime.utcnow()} {threading.current_thread().ident} > ', c1)
+    try:
+        log("pty_echo")
+        while status[2]:
+            c1 = fd1.read(1)
+            fd2.write(c1)
+            #print(f'{datetime.datetime.utcnow()} {threading.current_thread().ident} > ', c1)
+    except Exception as e:
+        log(e)
+        status[2] = False
+
+def run():
+    try:
+        print("(tr)uSDX audio driver")
+        status[0] = False
+        status[1] = False
+        status[2] = True
+
+        if platform == "linux" or platform == "linux2":
+           virtual_audio_dev_out = ""#"Loopback"#"TRUSDX"
+           virtual_audio_dev_in  = ""#"Loopback"#"TRUSDX"
+           trusdx_serial_dev     = "USB Serial"
+           loopback_serial_dev   = "/tmp/ttyS1"
+        elif platform == "win32":
+           virtual_audio_dev_out = "CABLE Output"
+           virtual_audio_dev_in  = "CABLE Input"
+           trusdx_serial_dev     = "CH340"
+           #loopback_serial_dev   = "com0com"
+           loopback_serial_dev   = "COM9"
+        elif platform == "darwin":
+           log("TBD OS X")
+
+        show_audio_devices()
+        print("Audio device = ", find_audio_device(virtual_audio_dev_in), find_audio_device(virtual_audio_dev_out) )
+        show_serial_devices()
+        print("Serial device = ", find_serial_device(trusdx_serial_dev) )
+
+        if platform != "win32":  # Linux
+           _master1, slave1 = os.openpty()  # Make a tty <-> tty device where one end is opened as serial device, other end by CAT app
+           _master2, slave2 = os.openpty()
+           master1 = os.fdopen(_master1, 'rb+', 0)
+           master2 = os.fdopen(_master2, 'rb+', 0)
+           print(f'CAT loopback = {os.ttyname(slave1)}')
+           threading.Thread(target=pty_echo, args=(master1,master2)).start()
+           threading.Thread(target=pty_echo, args=(master2,master1)).start()
+           #os.ttyname(slave1)
+           loopback_serial_dev = os.ttyname(slave2)
+
+        print("Serial loopback = ", find_serial_device(loopback_serial_dev) )
+        ser2 = serial.Serial(loopback_serial_dev, 115200, write_timeout = 0)
+        #    ser2 = serial.Serial(find_serial_device(loopback_serial_dev), 115200, write_timeout = 0)
+
+        ser = serial.Serial(find_serial_device(trusdx_serial_dev), 115200, write_timeout = 0)
+        #ser.dtr = True
+        #ser.rts = False
+        #ser2.dtr = True
+        #ser2.rts = False
+
+        time.sleep(3) # wait for device to start after opening serial port
+        ser.write(b";UA2;" if trusdx_mute else b";UA1;") # enable audio streaming, mute trusdx
+
+        in_stream = pyaudio.PyAudio().open(frames_per_buffer=0, format = pyaudio.paInt16, channels = 1, rate = audio_tx_rate, input = True, input_device_index = find_audio_device(virtual_audio_dev_out) if virtual_audio_dev_out else -1)
+        out_stream = pyaudio.PyAudio().open(frames_per_buffer=0, format = pyaudio.paUInt8, channels = 1, rate = audio_rx_rate, output = True, output_device_index = find_audio_device(virtual_audio_dev_in) if virtual_audio_dev_in else -1)
+
+        threading.Thread(target=receive_serial_audio, args=(ser,ser2)).start()
+        threading.Thread(target=play_receive_audio, args=(out_stream,)).start()
+        threading.Thread(target=transmit_audio_via_serial_vox if vox_mode else transmit_audio_via_serial_cat, args=(in_stream,ser,ser2)).start()
+
+        #ts = time.time()
+        while status[2]:    # wait and idle
+            # display some stats every 1 seconds
+            #log(f"{int(time.time()-ts)} buf: {len(buf)}")
+            time.sleep(1)
+    except Exception as e:
+        log(e)
+        status[2] = False
+    except KeyboardInterrupt:
+        log("[CTRL+C detected]")
+        status[2] = False
+
+    try:
+        # clean-up
+        log("Closing")
+        time.sleep(1)   
+        if platform != "win32":  # Linux
+           #master1.close()
+           #master2.close()
+           #os.close(_master1)           
+           os.close(slave1)
+           #os.close(_master2)
+           os.close(slave2)
+           log("fd closed")
+        ser2.close()
+        ser.close()
+        in_stream.close()
+        out_stream.close()           
+        log("Closed")
+    except Exception as e:
+        log(e)
+        pass	
 
 def main():
-    if platform == "linux" or platform == "linux2":
-       virtual_audio_dev_out = ""#"Loopback"#"TRUSDX"
-       virtual_audio_dev_in  = ""#"Loopback"#"TRUSDX"
-       trusdx_serial_dev     = "USB Serial"
-       loopback_serial_dev   = "/tmp/ttyS1"
-    elif platform == "win32":
-       virtual_audio_dev_out = "CABLE Output"
-       virtual_audio_dev_in  = "CABLE Input"
-       trusdx_serial_dev     = "CH340"
-       #loopback_serial_dev   = "com0com"
-       loopback_serial_dev   = "COM9"
-    elif platform == "darwin":
-       log("TBD OS X")
-
-    show_audio_devices()
-    print("Audio device = ", find_audio_device(virtual_audio_dev_in), find_audio_device(virtual_audio_dev_out) )
-    show_serial_devices()
-    print("Serial device = ", find_serial_device(trusdx_serial_dev) )
-
-    if platform == "linux" or platform == "linux2":
-       _master1, slave1 = os.openpty()  # Make a tty <-> tty device where one end is opened as serial device, other end by CAT app
-       _master2, slave2 = os.openpty()
-       master1 = os.fdopen(_master1, 'rb+', 0)
-       master2 = os.fdopen(_master2, 'rb+', 0)
-       print(f'CAT loopback = {os.ttyname(slave1)}')
-       threading.Thread(target=pty_echo, args=(master1,master2)).start()
-       threading.Thread(target=pty_echo, args=(master2,master1)).start()
-       os.ttyname(slave1)
-       loopback_serial_dev = os.ttyname(slave2)
-
-    print("Serial loopback = ", find_serial_device(loopback_serial_dev) )
-    ser2 = serial.Serial(loopback_serial_dev, 115200, write_timeout = 0)
-    #    ser2 = serial.Serial(find_serial_device(loopback_serial_dev), 115200, write_timeout = 0)
-
-    ser = serial.Serial(find_serial_device(trusdx_serial_dev), 115200, write_timeout = 0)
-    #ser.dtr = True
-    #ser.rts = False
-    #ser2.dtr = True
-    #ser2.rts = False
-
-    time.sleep(3) # wait for device to start after opening serial port
-    ser.write(b";UA2;" if trusdx_mute else b";UA1;") # enable audio streaming, mute trusdx
-
-    in_stream = pyaudio.PyAudio().open(frames_per_buffer=0, format = pyaudio.paInt16, channels = 1, rate = audio_tx_rate, input = True, input_device_index = find_audio_device(virtual_audio_dev_out) if virtual_audio_dev_out else -1)
-    out_stream = pyaudio.PyAudio().open(frames_per_buffer=0, format = pyaudio.paUInt8, channels = 1, rate = audio_rx_rate, output = True, output_device_index = find_audio_device(virtual_audio_dev_in) if virtual_audio_dev_in else -1)
-
-    threading.Thread(target=receive_serial_audio, args=(ser,ser2)).start()
-    threading.Thread(target=play_receive_audio, args=(out_stream,)).start()
-    threading.Thread(target=transmit_audio_via_serial_vox if vox_mode else transmit_audio_via_serial_cat, args=(in_stream,ser,ser2)).start()
-
-    # display some stats every 10 seconds
-    ts = time.time()
     while 1:
-        #log(f"{int(time.time()-ts)} buf: {len(buf)}")
-        time.sleep(10)
+        run();
 
 if __name__ == '__main__':
     #try:
