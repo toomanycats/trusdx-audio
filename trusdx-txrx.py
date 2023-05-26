@@ -43,23 +43,17 @@ import time
 import os
 import datetime
 import array
+import argparse
 from sys import platform
 
-## change these (if you need to)
 audio_tx_rate = 11521
 audio_rx_rate = 7812
-trusdx_mute = True
-vox_mode = False
-debug = True
-## 
-
 buf = []    # buffer for received audio
 urs = [0]   # underrun counter
 status = [False, False, True]	# tx_state, cat_streaming_state, running
-chunksize = 512
 
 def log(msg):
-    if(debug): print(f"{datetime.datetime.utcnow()} {msg}")
+    if config['verbose']: print(f"{datetime.datetime.utcnow()} {msg}")
 
 def show_audio_devices():
     for i in range(pyaudio.PyAudio().get_device_count()):
@@ -84,7 +78,7 @@ def receive_serial_audio(serport, catport):
     try:
         log("receive_serial_audio")
         while status[2]:
-            d = serport.read_until(b";", chunksize)   # read until CAT end or enough in buf
+            d = serport.read_until(b";", config['block_size'])   # read until CAT end or enough in buf
             if status[1]:
                 #log(f"stream: {d}")
                 buf.append(d)                   # in CAT streaming mode: fwd to audio buf
@@ -122,7 +116,7 @@ def transmit_audio_via_serial_vox(pastream, serport, catport):
     try:
         log("transmit_audio_via_serial_vox")
         while status[2]:
-            samples = pastream.read(chunksize, exception_on_overflow = False)
+            samples = pastream.read(config['block_size'], exception_on_overflow = False)
             samplesa = array.array('h', samples)
             samples8 = bytearray([128 + x//512 for x in samplesa])  # Win7 only support 16 bits input audio -> convert to 8 bits
             #log(f"{128 - min(samples8)} {max(samples8) - 127}")
@@ -149,7 +143,6 @@ def forward_cat(pastream, serport, catport):
             catport.write(b'ID020;')
             log(f"I: {d}")
             log(f"O: ID020; (emu)")
-            #serport.write(b";UA2;" if trusdx_mute else b";UA1;")     # instead issue UA cmd to keep rig in streaming mode
             return
         if status[0]:
             #log("***;")
@@ -164,7 +157,7 @@ def forward_cat(pastream, serport, catport):
            #log("***TX mode")
            pastream.stop_stream()
            pastream.start_stream()
-           pastream.read(chunksize, exception_on_overflow = False)
+           pastream.read(config['block_size'], exception_on_overflow = False)
         if d.startswith(b"RX"):
            status[0] = False
            #log("***RX mode")
@@ -175,7 +168,7 @@ def transmit_audio_via_serial_cat(pastream, serport, catport):
         while status[2]:
             forward_cat(pastream, serport, catport)
             if status[0] and pastream.get_read_available() > 0:    # in TX mode, and audio available
-                samples = pastream.read(chunksize, exception_on_overflow = False)
+                samples = pastream.read(config['block_size'], exception_on_overflow = False)
                 if status[0]:
                    arr = array.array('h', samples)
                    samples8 = bytearray([128 + x//512 for x in arr])  # Win7 only support 16 bits input audio -> convert to 8 bits
@@ -198,9 +191,9 @@ def pty_echo(fd1, fd2):
         log(e)
         status[2] = False
 
+# https://stackoverflow.com/questions/7088672/pyaudio-working-but-spits-out-error-messages-each-time
 def run():
     try:
-        print("(tr)uSDX audio driver")
         status[0] = False
         status[1] = False
         status[2] = True
@@ -209,7 +202,7 @@ def run():
            virtual_audio_dev_out = ""#"Loopback"#"TRUSDX"
            virtual_audio_dev_in  = ""#"Loopback"#"TRUSDX"
            trusdx_serial_dev     = "USB Serial"
-           loopback_serial_dev   = "/tmp/ttyS1"
+           loopback_serial_dev   = ""
         elif platform == "win32":
            virtual_audio_dev_out = "CABLE Output"
            virtual_audio_dev_in  = "CABLE Input"
@@ -217,12 +210,14 @@ def run():
            #loopback_serial_dev   = "com0com"
            loopback_serial_dev   = "COM9"
         elif platform == "darwin":
-           log("TBD OS X")
+           log("OS X not implemented yet")
 
-        show_audio_devices()
-        print("Audio device = ", find_audio_device(virtual_audio_dev_in), find_audio_device(virtual_audio_dev_out) )
-        show_serial_devices()
-        print("Serial device = ", find_serial_device(trusdx_serial_dev) )
+
+        ser = serial.Serial(find_serial_device(trusdx_serial_dev), 115200, write_timeout = 0)
+        #ser.dtr = True
+        #ser.rts = False
+        time.sleep(3) # wait for device to start after opening serial port
+        ser.write(b";UA2;" if not config['unmute'] else b";UA1;") # enable audio streaming, mute trusdx
 
         if platform != "win32":  # Linux
            _master1, slave1 = os.openpty()  # Make a tty <-> tty device where one end is opened as serial device, other end by CAT app
@@ -234,26 +229,22 @@ def run():
            threading.Thread(target=pty_echo, args=(master2,master1)).start()
            #os.ttyname(slave1)
            loopback_serial_dev = os.ttyname(slave2)
-
-        print("Serial loopback = ", find_serial_device(loopback_serial_dev) )
         ser2 = serial.Serial(loopback_serial_dev, 115200, write_timeout = 0)
-        #    ser2 = serial.Serial(find_serial_device(loopback_serial_dev), 115200, write_timeout = 0)
 
-        ser = serial.Serial(find_serial_device(trusdx_serial_dev), 115200, write_timeout = 0)
-        #ser.dtr = True
-        #ser.rts = False
-        #ser2.dtr = True
-        #ser2.rts = False
-
-        time.sleep(3) # wait for device to start after opening serial port
-        ser.write(b";UA2;" if trusdx_mute else b";UA1;") # enable audio streaming, mute trusdx
 
         in_stream = pyaudio.PyAudio().open(frames_per_buffer=0, format = pyaudio.paInt16, channels = 1, rate = audio_tx_rate, input = True, input_device_index = find_audio_device(virtual_audio_dev_out) if virtual_audio_dev_out else -1)
         out_stream = pyaudio.PyAudio().open(frames_per_buffer=0, format = pyaudio.paUInt8, channels = 1, rate = audio_rx_rate, output = True, output_device_index = find_audio_device(virtual_audio_dev_in) if virtual_audio_dev_in else -1)
 
+        if config['verbose']:
+            show_audio_devices()
+            print("Audio device = ", find_audio_device(virtual_audio_dev_in), find_audio_device(virtual_audio_dev_out) )
+            show_serial_devices()
+            print("Serial device = ", find_serial_device(trusdx_serial_dev) )
+            print("Serial loopback = ", find_serial_device(loopback_serial_dev) )
+
         threading.Thread(target=receive_serial_audio, args=(ser,ser2)).start()
         threading.Thread(target=play_receive_audio, args=(out_stream,)).start()
-        threading.Thread(target=transmit_audio_via_serial_vox if vox_mode else transmit_audio_via_serial_cat, args=(in_stream,ser,ser2)).start()
+        threading.Thread(target=transmit_audio_via_serial_vox if config['vox'] else transmit_audio_via_serial_cat, args=(in_stream,ser,ser2)).start()
 
         #ts = time.time()
         while status[2]:    # wait and idle
@@ -289,12 +280,22 @@ def run():
         pass	
 
 def main():
+    print("(tr)uSDX audio driver")
     while 1:
         run();
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="(tr)uSDX audio driver", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument("-v", "--verbose", action="store_true", default=False, help="increase verbosity")
+    parser.add_argument("--vox", action="store_true", default=False, help="For PTT control use VOX audio-trigger (instead of CAT)")
+    parser.add_argument("--unmute", action="store_true", default=False, help="Enable (tr)usdx audio")
+    parser.add_argument("-B", "--block-size", default=512, help="Block size")
+    args = parser.parse_args()
+    config = vars(args)
+    if config['verbose']: print(config)
+
     #try:
-        main()
+    main()
     #except Exception as e:
     #    print(f"Error: {e}")
     #    time.sleep(3)
