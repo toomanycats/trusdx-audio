@@ -31,6 +31,8 @@
 # setupc.exe install PortName=COM8 PortName=COM9
 # (as admin) VBCABLE_Setup_x64.exe
 
+# Setup installer NSIS 3.08: https://nsis.sourceforge.io/Download
+
 #
 # Linux:
 # sudo apt install portaudio19-dev
@@ -171,7 +173,7 @@ def transmit_audio_via_serial_cat(pastream, serport, catport):
                 samples = pastream.read(config['block_size'], exception_on_overflow = False)
                 if status[0]:
                    arr = array.array('h', samples)
-                   samples8 = bytearray([128 + x//512 for x in arr])  # Win7 only support 16 bits input audio -> convert to 8 bits
+                   samples8 = bytearray([128 + x//256 for x in arr])  # Win7 only support 16 bits input audio -> convert to 8 bits
                    samples8 = samples8.replace(b'\x3b', b'\x3a')      # filter ; of stream
                    serport.write(samples8)
             else:
