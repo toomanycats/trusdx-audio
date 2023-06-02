@@ -78,6 +78,7 @@ def receive_serial_audio(serport, catport):
         log("receive_serial_audio")
         while status[2]:
             d = serport.read_until(b";", config['block_size'])   # read until CAT end or enough in buf
+            #d = serport.read_until(b";", 32)   # read until CAT end or enough in buf
             if status[1]:
                 #log(f"stream: {d}")
                 buf.append(d)                   # in CAT streaming mode: fwd to audio buf
@@ -104,7 +105,7 @@ def play_receive_audio(pastream):
                 #log(f"UNDERRUN #{urs[0]} - refilling")
                 urs[0] += 1
                 while len(buf) < 10:
-                    time.sleep(0.01)
+                    time.sleep(0.001)
             if not status[0]: pastream.write(buf[0])
             buf.remove(buf[0])
     except Exception as e:
@@ -159,6 +160,8 @@ def forward_cat(pastream, serport, catport):
            pastream.read(config['block_size'], exception_on_overflow = False)
         if d.startswith(b"RX"):
            status[0] = False
+           pastream.stop_stream()
+           pastream.start_stream()
            #log("***RX mode")
 
 def transmit_audio_via_serial_cat(pastream, serport, catport):
@@ -257,7 +260,7 @@ def run():
         threading.Thread(target=play_receive_audio, args=(out_stream,)).start()
         threading.Thread(target=transmit_audio_via_serial_vox if config['vox'] else transmit_audio_via_serial_cat, args=(in_stream,ser,ser2)).start()
 
-        print("(tr)uSDX driver OK")
+        print(f"(tr)uSDX driver OK: devices [{virtual_audio_dev_in}, {virtual_audio_dev_in}, {loopback_serial_dev}]" )
         #ts = time.time()
         while status[2]:    # wait and idle
             # display some stats every 1 seconds
@@ -302,7 +305,7 @@ if __name__ == '__main__':
     parser.add_argument("-v", "--verbose", action="store_true", default=False, help="increase verbosity")
     parser.add_argument("--vox", action="store_true", default=False, help="For PTT control use VOX audio-trigger (instead of CAT)")
     parser.add_argument("--unmute", action="store_true", default=False, help="Enable (tr)usdx audio")
-    parser.add_argument("-B", "--block-size", default=512, help="Block size")
+    parser.add_argument("-B", "--block-size", default=64, help="Block size")
     args = parser.parse_args()
     config = vars(args)
     if config['verbose']: print(config)
