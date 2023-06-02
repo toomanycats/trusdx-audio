@@ -99,6 +99,7 @@ def receive_serial_audio(serport, catport):
     except Exception as e:
         log(e)
         status[2] = False
+        if config['verbose']: raise
 
 def play_receive_audio(pastream):
     try:
@@ -114,6 +115,7 @@ def play_receive_audio(pastream):
     except Exception as e:
         log(e)
         status[2] = False
+        if config['verbose']: raise
 
 def transmit_audio_via_serial_vox(pastream, serport, catport):
     try:
@@ -138,12 +140,13 @@ def transmit_audio_via_serial_vox(pastream, serport, catport):
     except Exception as e:
         log(e)
         status[2] = False
+        if config['verbose']: raise
 
 def forward_cat(pastream, serport, catport):
     if(catport.inWaiting()):
         if not status[3]:
             status[3] = True
-            log("*** CAT interface active")
+            log("CAT interface active")
         d = catport.read_until(b";")
         if True and d.startswith(b'ID'):   # this is a workaround for unrealistic fast RTT expectations in hamlib for sequence RX;ID;
             catport.write(b'ID020;')
@@ -187,6 +190,7 @@ def transmit_audio_via_serial_cat(pastream, serport, catport):
     except Exception as e:
         log(e)
         status[2] = False
+        if config['verbose']: raise
 
 def pty_echo(fd1, fd2):
     try:
@@ -198,6 +202,7 @@ def pty_echo(fd1, fd2):
     except Exception as e:
         log(e)
         status[2] = False
+        if config['verbose']: raise
 
 # https://stackoverflow.com/questions/7088672/pyaudio-working-but-spits-out-error-messages-each-time
 def run():
@@ -313,7 +318,7 @@ if __name__ == '__main__':
     parser.add_argument("-v", "--verbose", action="store_true", default=False, help="increase verbosity")
     parser.add_argument("--vox", action="store_true", default=False, help="For PTT control use VOX audio-trigger (instead of CAT)")
     parser.add_argument("--unmute", action="store_true", default=False, help="Enable (tr)usdx audio")
-    parser.add_argument("-B", "--block-size", default=64, help="Block size")
+    parser.add_argument("-B", "--block-size", type=int, default=64, help="Block size")
     args = parser.parse_args()
     config = vars(args)
     if config['verbose']: print(config)
