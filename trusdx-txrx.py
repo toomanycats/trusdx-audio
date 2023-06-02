@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-# de SQ3SWF 2023
-#
-#Linux:
-#stty -F /dev/ttyUSB0 raw -echo -echoe -echoctl -echoke -hupcl 115200;
-#socat -d -d pty,link=/tmp/ttyS0,echo=0,ignoreeof,b115200,raw,perm=0777 pty,link=/tmp/ttyS1,echo=0,ignoreeof,b115200,raw,perm=0777 &
-#pactl load-module module-null-sink sink_name=TRUSDX sink_properties=device.description="TRUSDX"
-#pavucontrol
-####
-#sudo modprobe snd-aloop
-#
+# de SQ3SWF, PE1NNZ 2023
+
+# Linux:
+# sudo apt install portaudio19-dev
+# stty -F /dev/ttyUSB0 raw -echo -echoe -echoctl -echoke -hupcl 115200;
+# pactl load-module module-null-sink sink_name=TRUSDX sink_properties=device.description="TRUSDX"
+# pavucontrol
+###
+
 # Windows 7:
 # Install python3.6
 # python -m pip install --upgrade pip
@@ -31,9 +30,9 @@
 # setupc.exe install PortName=COM8 PortName=COM9
 # (as admin) VBCABLE_Setup_x64.exe
 
-#
-# Linux:
-# sudo apt install portaudio19-dev
+###
+# socat -d -d pty,link=/tmp/ttyS0,echo=0,ignoreeof,b115200,raw,perm=0777 pty,link=/tmp/ttyS1,echo=0,ignoreeof,b115200,raw,perm=0777 &
+# sudo modprobe snd-aloop
 
 import pyaudio
 import serial
@@ -199,15 +198,14 @@ def run():
         status[2] = True
 
         if platform == "linux" or platform == "linux2":
-           virtual_audio_dev_out = ""#"Loopback"#"TRUSDX"
-           virtual_audio_dev_in  = ""#"Loopback"#"TRUSDX"
+           virtual_audio_dev_out = ""#"TRUSDX"
+           virtual_audio_dev_in  = ""#"TRUSDX"
            trusdx_serial_dev     = "USB Serial"
            loopback_serial_dev   = ""
         elif platform == "win32":
            virtual_audio_dev_out = "CABLE Output"
            virtual_audio_dev_in  = "CABLE Input"
            trusdx_serial_dev     = "CH340"
-           #loopback_serial_dev   = "com0com"
            loopback_serial_dev   = "COM9"
         elif platform == "darwin":
            log("OS X not implemented yet")
@@ -219,8 +217,8 @@ def run():
             print("Serial device = ", find_serial_device(trusdx_serial_dev) )
             print("Serial loopback = ", find_serial_device(loopback_serial_dev) )
 
-        if platform != "win32":  # Linux
-           _master1, slave1 = os.openpty()  # Make a tty <-> tty device where one end is opened as serial device, other end by CAT app
+        if platform != "win32":  # skip for Windows as we have com0com there
+           _master1, slave1 = os.openpty()  # make a tty <-> tty device where one end is opened as serial device, other end by CAT app
            _master2, slave2 = os.openpty()
            master1 = os.fdopen(_master1, 'rb+', 0)
            master2 = os.fdopen(_master2, 'rb+', 0)
@@ -229,12 +227,27 @@ def run():
            threading.Thread(target=pty_echo, args=(master2,master1)).start()
            #os.ttyname(slave1)
            loopback_serial_dev = os.ttyname(slave2)
-        ser2 = serial.Serial(loopback_serial_dev, 115200, write_timeout = 0)
-
-        in_stream = pyaudio.PyAudio().open(frames_per_buffer=0, format = pyaudio.paInt16, channels = 1, rate = audio_tx_rate, input = True, input_device_index = find_audio_device(virtual_audio_dev_out) if virtual_audio_dev_out else -1)
-        out_stream = pyaudio.PyAudio().open(frames_per_buffer=0, format = pyaudio.paUInt8, channels = 1, rate = audio_rx_rate, output = True, output_device_index = find_audio_device(virtual_audio_dev_in) if virtual_audio_dev_in else -1)
-
-        ser = serial.Serial(find_serial_device(trusdx_serial_dev), 115200, write_timeout = 0)
+        try:
+            ser2 = serial.Serial(loopback_serial_dev, 115200, write_timeout = 0)
+        except Exception as e:
+            if platform == "win32": print("com0com not found: reinstall/disable driver signature enforcement (F8 on boot)")
+            else: print("/dev/pts/x device not found")
+            raise
+        
+        try:
+           in_stream = pyaudio.PyAudio().open(frames_per_buffer=0, format = pyaudio.paInt16, channels = 1, rate = audio_tx_rate, input = True, input_device_index = find_audio_device(virtual_audio_dev_out) if virtual_audio_dev_out else -1)
+           out_stream = pyaudio.PyAudio().open(frames_per_buffer=0, format = pyaudio.paUInt8, channels = 1, rate = audio_rx_rate, output = True, output_device_index = find_audio_device(virtual_audio_dev_in) if virtual_audio_dev_in else -1)
+        except Exception as e:
+            if platform == "win32": print("VB-Audio CABLE not found: reinstall or enable")
+            else: print("port audio device not found")
+            raise
+ 
+        try:
+            ser = serial.Serial(find_serial_device(trusdx_serial_dev), 115200, write_timeout = 0)
+        except Exception as e:
+            print("truSDX device not found")
+            raise
+            
         #ser.dtr = True
         #ser.rts = False
         time.sleep(3) # wait for device to start after opening serial port
@@ -244,6 +257,7 @@ def run():
         threading.Thread(target=play_receive_audio, args=(out_stream,)).start()
         threading.Thread(target=transmit_audio_via_serial_vox if config['vox'] else transmit_audio_via_serial_cat, args=(in_stream,ser,ser2)).start()
 
+        print("(tr)uSDX driver OK")
         #ts = time.time()
         while status[2]:    # wait and idle
             # display some stats every 1 seconds
@@ -253,8 +267,9 @@ def run():
         log(e)
         status[2] = False
     except KeyboardInterrupt:
-        log("[CTRL+C detected]")
+        print("Stopping")
         status[2] = False
+        ser.write(b";UA0;")
 
     try:
         # clean-up
@@ -278,7 +293,7 @@ def run():
         pass	
 
 def main():
-    print("(tr)uSDX audio driver")
+    #print("(tr)uSDX audio driver")
     while 1:
         run();
 
