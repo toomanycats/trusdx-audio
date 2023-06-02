@@ -49,7 +49,7 @@ audio_tx_rate = 11521
 audio_rx_rate = 7812
 buf = []    # buffer for received audio
 urs = [0]   # underrun counter
-status = [False, False, True]	# tx_state, cat_streaming_state, running
+status = [False, False, True, False]	# tx_state, cat_streaming_state, running, cat_active
 
 def log(msg):
     if config['verbose']: print(f"{datetime.datetime.utcnow()} {msg}")
@@ -90,9 +90,12 @@ def receive_serial_audio(serport, catport):
                     #log("***US mode")
                     status[1] = True            # go to CAT stream mode when data starts with US
                 else:
-                    catport.write(d)
-                    catport.flush()
-                    log(f"O: {d}")  # in CAT command mode
+                    if status[3]:               # only send something to cat port, when active
+                        catport.write(d)
+                        catport.flush()
+                        log(f"O: {d}")  # in CAT command mode
+                    else:
+                        log("Skip CAT response, as CAT is not actuve.")
     except Exception as e:
         log(e)
         status[2] = False
@@ -138,6 +141,9 @@ def transmit_audio_via_serial_vox(pastream, serport, catport):
 
 def forward_cat(pastream, serport, catport):
     if(catport.inWaiting()):
+        if not status[3]:
+            status[3] = True
+            log("*** CAT interface active")
         d = catport.read_until(b";")
         if True and d.startswith(b'ID'):   # this is a workaround for unrealistic fast RTT expectations in hamlib for sequence RX;ID;
             catport.write(b'ID020;')
@@ -199,6 +205,7 @@ def run():
         status[0] = False
         status[1] = False
         status[2] = True
+        status[3] = False
 
         if platform == "linux" or platform == "linux2":
            virtual_audio_dev_out = ""#"TRUSDX"
@@ -255,6 +262,7 @@ def run():
         #ser.rts = False
         time.sleep(3) # wait for device to start after opening serial port
         ser.write(b";UA2;" if not config['unmute'] else b";UA1;") # enable audio streaming, mute trusdx
+        #status[1] = True
 
         threading.Thread(target=receive_serial_audio, args=(ser,ser2)).start()
         threading.Thread(target=play_receive_audio, args=(out_stream,)).start()
