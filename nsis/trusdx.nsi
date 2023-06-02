@@ -13,15 +13,18 @@ InstallDirRegKey HKLM "${REGPATH_UNINSTSUBKEY}" "UninstallString"
 
 !include LogicLib.nsh
 !include Integration.nsh
+!include WinVer.nsh
 
+!include MUI.nsh
 !include nsDialogs.nsh
 !include WinCore.nsh ; MAKELONG
-!include MUI.nsh
 
 
 ;Page custom nsDialogsWelcome
 Page Directory
-Page InstFiles
+;Page InstFiles
+!insertmacro MUI_PAGE_INSTFILES
+!insertmacro MUI_LANGUAGE English
 Page custom nsDialogsWelcome
 Page custom PostInstall
 
@@ -64,17 +67,16 @@ Section "Program files (Required)"
   ;!tempfile APP
   ;File "/oname=$InstDir\MyApp.exe" "${APP}" ; Pretend that we have a real application to install
   ;!delfile "${APP}"
-  ;File *
   File "trusdx.bmp"
-  File "Setup_trusdx\*.*"
+  File "truSDX Driver.dist\*.*"
   File /R "Setup_vbcable"
   File "Setup_com0com_x64.exe"
+  File "setup.cmd"
 SectionEnd
 
 Section "Start Menu shortcut"
   CreateShortcut /NoWorkingDir "$SMPrograms\${NAME}.lnk" "$InstDir\truSDX Driver.exe"
 SectionEnd
-
 
 !macro DeleteFileOrAskAbort path
   ClearErrors
@@ -94,16 +96,27 @@ Section -Uninstall
   Delete "$SMPrograms\${NAME}.lnk"
 SectionEnd
 
+Function PostInstall
+      MessageBox MB_OK "Now, VB-Audio Cable and COM0COM will be installed. Please select INSTALL DRIVER, and CLOSE the browser and continue with the COM0COM setup."
 
+	ExecWait '"$InstDir\Setup_vbcable\VBCABLE_Setup_x64.exe"'	
+	Delete "$InstDir\Setup_vbcable\*.*"
+	RMDir "$InstDir\Setup_vbcable"
 
-!insertmacro MUI_PAGE_INSTFILES
-!insertmacro MUI_LANGUAGE English
+	ExecWait '"$InstDir\Setup_com0com_x64.exe" /S'
+	Delete "$InstDir\Setup_com0com_x64.exe"
+	
+	ExecWait '"$InstDir\setup.cmd"'
+	Delete "$InstDir\setup.cmd"
+	Delete "$InstDir\trusdx.bmp"
 
-!macro BeginControlsTestPage title
-	nsDialogs::Create 1018
-	Pop $0
-	${NSD_SetText} $hWndParent "$(^Name): ${title}"
-!macroend
+	MessageBox MB_YESNO|MB_ICONQUESTION "Reboot the system?" IDNO +2
+		${IF} ${IsWin7}
+			MessageBox MB_OK|MB_ICONQUESTION "'Rebooting... PRESS F8 and select: 'Disable Driver Signature Enforcement'  "
+			Reboot
+		${EndIf}
+		DetailPrint "Installation Finished"
+FunctionEnd
 
 Var DIALOG
 Var HEADLINE
@@ -118,7 +131,7 @@ Function nsDialogsWelcome
 	nsDialogs::CreateControl STATIC ${WS_VISIBLE}|${WS_CHILD}|${WS_CLIPSIBLINGS}|${SS_BITMAP} 0 0 0 109u 193u ""
 	Pop $IMAGECTL
 
-      StrCpy $0 $InstDir\trusdx.bmp
+    StrCpy $0 $InstDir\trusdx.bmp
 	System::Call 'user32::LoadImage(p 0, t r0, i ${IMAGE_BITMAP}, i 0, i 0, i ${LR_LOADFROMFILE})p.s'
 	Pop $IMAGE
 	
@@ -128,7 +141,6 @@ Function nsDialogsWelcome
 	Pop $HEADLINE
 	SendMessage $HEADLINE ${WM_SETFONT} $HEADLINE_FONT 0
 
-	;nsDialogs::CreateControl STATIC ${WS_VISIBLE}|${WS_CHILD}|${WS_CLIPSIBLINGS} 0 120u 32u -130u -32u "This  installs a (tr)uSDX driver, a Virtual Audio and Serial COM Interface. It makes audio streaming possible over USB. Audio cables are no longer needed to connect the (tr)uSDX to your favorite digimode app, and you can still enjoying CAT control! 73, Guido PE1NNZ"
 	nsDialogs::CreateControl STATIC ${WS_VISIBLE}|${WS_CHILD}|${WS_CLIPSIBLINGS} 0 120u 32u -130u -32u "The (tr)uSDX driver makes audio streaming over USB possible. Audio cables are no longer needed! A Virtual Audio and Virtual COM Driver is installed in the background to connect to your favorite digimode application. The (tr)uSDX Driver can be started from the start menu."
 	Pop $TEXT
 	SetCtlColors $DIALOG 0 0xffffff
@@ -138,13 +150,5 @@ Function nsDialogsWelcome
 	System::Call gdi32::DeleteObject(p$IMAGE)
 FunctionEnd
 
-Function PostInstall
-      MessageBox MB_OK "Now, VB-Audio Cable and COM0COM will be installed. Please select INSTALL DRIVER, and CLOSE the browser and continue with the COM0COM setup."
-
-	ExecWait '"$InstDir\Setup_vbcable\VBCABLE_Setup_x64.exe"'
-
-	ExecWait '"$InstDir\Setup_com0com_x64.exe"'
-
-	MessageBox MB_YESNO|MB_ICONQUESTION "Reboot the system?" IDNO +2
-		Reboot
-FunctionEnd
+Section
+SectionEnd

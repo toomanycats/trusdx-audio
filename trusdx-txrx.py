@@ -31,8 +31,6 @@
 # setupc.exe install PortName=COM8 PortName=COM9
 # (as admin) VBCABLE_Setup_x64.exe
 
-# Setup installer NSIS 3.08: https://nsis.sourceforge.io/Download
-
 #
 # Linux:
 # sudo apt install portaudio19-dev
@@ -173,7 +171,7 @@ def transmit_audio_via_serial_cat(pastream, serport, catport):
                 samples = pastream.read(config['block_size'], exception_on_overflow = False)
                 if status[0]:
                    arr = array.array('h', samples)
-                   samples8 = bytearray([128 + x//256 for x in arr])  # Win7 only support 16 bits input audio -> convert to 8 bits
+                   samples8 = bytearray([128 + x//512 for x in arr])  # Win7 only support 16 bits input audio -> convert to 8 bits
                    samples8 = samples8.replace(b'\x3b', b'\x3a')      # filter ; of stream
                    serport.write(samples8)
             else:
@@ -214,12 +212,12 @@ def run():
         elif platform == "darwin":
            log("OS X not implemented yet")
 
-
-        ser = serial.Serial(find_serial_device(trusdx_serial_dev), 115200, write_timeout = 0)
-        #ser.dtr = True
-        #ser.rts = False
-        time.sleep(3) # wait for device to start after opening serial port
-        ser.write(b";UA2;" if not config['unmute'] else b";UA1;") # enable audio streaming, mute trusdx
+        if config['verbose']:
+            show_audio_devices()
+            print("Audio device = ", find_audio_device(virtual_audio_dev_in), find_audio_device(virtual_audio_dev_out) )
+            show_serial_devices()
+            print("Serial device = ", find_serial_device(trusdx_serial_dev) )
+            print("Serial loopback = ", find_serial_device(loopback_serial_dev) )
 
         if platform != "win32":  # Linux
            _master1, slave1 = os.openpty()  # Make a tty <-> tty device where one end is opened as serial device, other end by CAT app
@@ -233,16 +231,14 @@ def run():
            loopback_serial_dev = os.ttyname(slave2)
         ser2 = serial.Serial(loopback_serial_dev, 115200, write_timeout = 0)
 
-
         in_stream = pyaudio.PyAudio().open(frames_per_buffer=0, format = pyaudio.paInt16, channels = 1, rate = audio_tx_rate, input = True, input_device_index = find_audio_device(virtual_audio_dev_out) if virtual_audio_dev_out else -1)
         out_stream = pyaudio.PyAudio().open(frames_per_buffer=0, format = pyaudio.paUInt8, channels = 1, rate = audio_rx_rate, output = True, output_device_index = find_audio_device(virtual_audio_dev_in) if virtual_audio_dev_in else -1)
 
-        if config['verbose']:
-            show_audio_devices()
-            print("Audio device = ", find_audio_device(virtual_audio_dev_in), find_audio_device(virtual_audio_dev_out) )
-            show_serial_devices()
-            print("Serial device = ", find_serial_device(trusdx_serial_dev) )
-            print("Serial loopback = ", find_serial_device(loopback_serial_dev) )
+        ser = serial.Serial(find_serial_device(trusdx_serial_dev), 115200, write_timeout = 0)
+        #ser.dtr = True
+        #ser.rts = False
+        time.sleep(3) # wait for device to start after opening serial port
+        ser.write(b";UA2;" if not config['unmute'] else b";UA1;") # enable audio streaming, mute trusdx
 
         threading.Thread(target=receive_serial_audio, args=(ser,ser2)).start()
         threading.Thread(target=play_receive_audio, args=(out_stream,)).start()
