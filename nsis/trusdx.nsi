@@ -110,12 +110,18 @@ Function PostInstall
 	Delete "$InstDir\setup.cmd"
 	Delete "$InstDir\trusdx.bmp"
 
-	MessageBox MB_YESNO|MB_ICONQUESTION "Reboot the system?" IDNO +2
-		${IF} ${IsWin7}
-			MessageBox MB_OK|MB_ICONQUESTION "'Rebooting... PRESS F8 and select: 'Disable Driver Signature Enforcement'  "
-			Reboot
-		${EndIf}
-		DetailPrint "Installation Finished"
+	;MessageBox MB_YESNO|MB_ICONQUESTION "Reboot the system?" IDNO +2
+	;	${IF} ${IsWin7}
+	;		MessageBox MB_OK|MB_ICONQUESTION "'Rebooting... PRESS F8 and select: 'Disable Driver Signature Enforcement'  "
+	;		Reboot
+	;	${EndIf}
+
+	${IF} ${IsWin7}
+		MessageBox MB_OK|MB_ICONQUESTION "Now since com0com is not signed, REBOOT this way: Start Menu > Restart > F8 on boot > Disable driver signature enforc."
+	${Else}
+		MessageBox MB_OK|MB_ICONQUESTION "Now since com0com is not signed, REBOOT this way: Start Menu > Restart + hold SHIFT > Troubleshoot > Advanced options > Startup Settings > Restart > 7 Disable driver signature enforcement"
+	${EndIf}
+	DetailPrint "Installation Finished"
 FunctionEnd
 
 Var DIALOG

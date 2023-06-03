@@ -77,8 +77,8 @@ def receive_serial_audio(serport, catport):
     try:
         log("receive_serial_audio")
         while status[2]:
-            d = serport.read_until(b";", config['block_size'])   # read until CAT end or enough in buf
-            #d = serport.read_until(b";", 32)   # read until CAT end or enough in buf
+            #d = serport.read_until(b";", config['block_size'])   # read until CAT end or enough in buf
+            d = serport.read_until(b";", 32)   # read until CAT end or enough in buf but only up to 32 bytes to keep response time low
             if status[1]:
                 #log(f"stream: {d}")
                 buf.append(d)                   # in CAT streaming mode: fwd to audio buf
@@ -217,11 +217,13 @@ def run():
            virtual_audio_dev_in  = ""#"TRUSDX"
            trusdx_serial_dev     = "USB Serial"
            loopback_serial_dev   = ""
+           cat_serial_dev        = ""
         elif platform == "win32":
            virtual_audio_dev_out = "CABLE Output"
            virtual_audio_dev_in  = "CABLE Input"
            trusdx_serial_dev     = "CH340"
            loopback_serial_dev   = "COM9"
+           cat_serial_dev        = "COM8"
         elif platform == "darwin":
            log("OS X not implemented yet")
 
@@ -237,24 +239,29 @@ def run():
            _master2, slave2 = os.openpty()
            master1 = os.fdopen(_master1, 'rb+', 0)
            master2 = os.fdopen(_master2, 'rb+', 0)
-           print(f'CAT loopback = {os.ttyname(slave1)}')
            threading.Thread(target=pty_echo, args=(master1,master2)).start()
            threading.Thread(target=pty_echo, args=(master2,master1)).start()
-           #os.ttyname(slave1)
+           cat_serial_dev = os.ttyname(slave1)
            loopback_serial_dev = os.ttyname(slave2)
         try:
             ser2 = serial.Serial(loopback_serial_dev, 115200, write_timeout = 0)
         except Exception as e:
-            if platform == "win32": print("com0com not found: reinstall/disable driver signature enforcement (F8 on boot)")
-            else: print("/dev/pts/x device not found")
-            raise
+            if platform == "win32":
+                print("com0com not found: now since com0com is not signed, everytime REBOOT this way:")
+                print("  Win7:  Start Menu > Restart > F8 on boot > Disable driver signature enforc.")
+                print("  W8-11: Start Menu > Restart + hold SHIFT > Troubleshoot > Advanced options >")
+                print("         Startup Settings > Restart > 7 Disable driver signature enforcement")
+            else:
+                print("/dev/pts/x device not found")
         
         try:
            in_stream = pyaudio.PyAudio().open(frames_per_buffer=0, format = pyaudio.paInt16, channels = 1, rate = audio_tx_rate, input = True, input_device_index = find_audio_device(virtual_audio_dev_out) if virtual_audio_dev_out else -1)
            out_stream = pyaudio.PyAudio().open(frames_per_buffer=0, format = pyaudio.paUInt8, channels = 1, rate = audio_rx_rate, output = True, output_device_index = find_audio_device(virtual_audio_dev_in) if virtual_audio_dev_in else -1)
         except Exception as e:
             if platform == "win32": print("VB-Audio CABLE not found: reinstall or enable")
-            else: print("port audio device not found")
+            else:
+                print("port audio device not found: ")
+                print("  run in terminal: pactl load-module module-null-sink sink_name=TRUSDX sink_properties=device.description=\"TRUSDX\" && pavucontrol")
             raise
  
         try:
@@ -273,7 +280,7 @@ def run():
         threading.Thread(target=play_receive_audio, args=(out_stream,)).start()
         threading.Thread(target=transmit_audio_via_serial_vox if config['vox'] else transmit_audio_via_serial_cat, args=(in_stream,ser,ser2)).start()
 
-        print(f"(tr)uSDX driver OK: devices [{virtual_audio_dev_in}, {virtual_audio_dev_in}, {loopback_serial_dev}]" )
+        print(f"(tr)uSDX driver OK! Available devices = [{virtual_audio_dev_in}, {virtual_audio_dev_in}, {cat_serial_dev}]" )
         #ts = time.time()
         while status[2]:    # wait and idle
             # display some stats every 1 seconds
@@ -318,7 +325,7 @@ if __name__ == '__main__':
     parser.add_argument("-v", "--verbose", action="store_true", default=False, help="increase verbosity")
     parser.add_argument("--vox", action="store_true", default=False, help="For PTT control use VOX audio-trigger (instead of CAT)")
     parser.add_argument("--unmute", action="store_true", default=False, help="Enable (tr)usdx audio")
-    parser.add_argument("-B", "--block-size", type=int, default=64, help="Block size")
+    parser.add_argument("-B", "--block-size", type=int, default=512, help="Block size")
     args = parser.parse_args()
     config = vars(args)
     if config['verbose']: print(config)
