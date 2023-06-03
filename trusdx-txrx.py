@@ -95,7 +95,7 @@ def receive_serial_audio(ser, cat):
                         cat.flush()
                         log(f"O: {d}")  # in CAT command mode
                     else:
-                        log("Skip CAT response, as CAT is not actuve.")
+                        log("Skip CAT response, as CAT is not active.")
     except Exception as e:
         log(e)
         status[2] = False
@@ -184,7 +184,7 @@ def transmit_audio_via_serial(pastream, ser, cat):
         log("transmit_audio_via_serial_cat")
         while status[2]:
             handle_cat(pastream, ser, cat)
-            handle_rts_dtr(ser, cat)
+            if(not config['no_rtsdtr']): handle_rts_dtr(ser, cat)
             if (status[0] or config['vox']) and pastream.get_read_available() > 0:    # in TX mode, and audio available
                 samples = pastream.read(config['block_size'], exception_on_overflow = False)
                 arr = array.array('h', samples)
@@ -331,8 +331,9 @@ def main():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="(tr)uSDX audio driver", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-v", "--verbose", action="store_true", default=False, help="increase verbosity")
-    parser.add_argument("--vox", action="store_true", default=False, help="VOX audio-trigger PTT (Linux only)")
+    parser.add_argument("--vox", action="store_true", default=False, help="VOX audio-triggered PTT (Linux only)")
     parser.add_argument("--unmute", action="store_true", default=False, help="Enable (tr)usdx audio")
+    parser.add_argument("--no-rtsdtr", action="store_true", default=False, help="Disable RTS/DTR-triggered PTT")
     parser.add_argument("-B", "--block-size", type=int, default=512, help="Block size")
     args = parser.parse_args()
     config = vars(args)
