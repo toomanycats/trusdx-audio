@@ -173,18 +173,28 @@ def forward_cat(pastream, serport, catport):
            pastream.start_stream()
            #log("***RX mode")
 
-def transmit_audio_via_serial_cat(pastream, serport, catport):
+def transmit_audio_via_serial(pastream, serport, catport):
     try:
         log("transmit_audio_via_serial_cat")
         while status[2]:
             forward_cat(pastream, serport, catport)
-            if status[0] and pastream.get_read_available() > 0:    # in TX mode, and audio available
+            if (status[0] or config['vox']) and pastream.get_read_available() > 0:    # in TX mode, and audio available
                 samples = pastream.read(config['block_size'], exception_on_overflow = False)
-                if status[0]:
-                   arr = array.array('h', samples)
-                   samples8 = bytearray([128 + x//512 for x in arr])  # Win7 only support 16 bits input audio -> convert to 8 bits
-                   samples8 = samples8.replace(b'\x3b', b'\x3a')      # filter ; of stream
-                   serport.write(samples8)
+                arr = array.array('h', samples)
+                samples8 = bytearray([128 + x//512 for x in arr])  # Win7 only support 16 bits input audio -> convert to 8 bits
+                samples8 = samples8.replace(b'\x3b', b'\x3a')      # filter ; of stream
+                if status[0]: serport.write(samples8)
+                # VOX related stuff:
+                if config['vox'] and (128 - min(samples8)) == 64 and (max(samples8) - 127) == 64: # if does contain very loud signal
+                    if not status[0]:
+                        status[0] = True
+                        log("TX ON")
+                        serport.write(b"UA2;TX0;")
+                elif config['vox'] and status[0]:  # in TX and no audio detected (silence)
+                    time.sleep(0.1)
+                    serport.write(b";RX;")
+                    status[0] = False
+                    log("TX OFF")
             else:
                 time.sleep(0.001)
     except Exception as e:
@@ -278,9 +288,9 @@ def run():
 
         threading.Thread(target=receive_serial_audio, args=(ser,ser2)).start()
         threading.Thread(target=play_receive_audio, args=(out_stream,)).start()
-        threading.Thread(target=transmit_audio_via_serial_vox if config['vox'] else transmit_audio_via_serial_cat, args=(in_stream,ser,ser2)).start()
+        threading.Thread(target=transmit_audio_via_serial, args=(in_stream,ser,ser2)).start()
 
-        print(f"(tr)uSDX driver OK! Available devices = [{virtual_audio_dev_in}, {virtual_audio_dev_in}, {cat_serial_dev}]" )
+        print(f"(tr)uSDX driver OK! Available devices = [{virtual_audio_dev_in}, {virtual_audio_dev_out}, {cat_serial_dev}]" )
         #ts = time.time()
         while status[2]:    # wait and idle
             # display some stats every 1 seconds
@@ -323,7 +333,7 @@ def main():
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="(tr)uSDX audio driver", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("-v", "--verbose", action="store_true", default=False, help="increase verbosity")
-    parser.add_argument("--vox", action="store_true", default=False, help="For PTT control use VOX audio-trigger (instead of CAT)")
+    parser.add_argument("--vox", action="store_true", default=False, help="VOX audio-trigger PTT (Linux only)")
     parser.add_argument("--unmute", action="store_true", default=False, help="Enable (tr)usdx audio")
     parser.add_argument("-B", "--block-size", type=int, default=512, help="Block size")
     args = parser.parse_args()
