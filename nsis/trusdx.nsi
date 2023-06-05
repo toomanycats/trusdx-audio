@@ -19,7 +19,6 @@ InstallDirRegKey HKLM "${REGPATH_UNINSTSUBKEY}" "UninstallString"
 !include nsDialogs.nsh
 !include WinCore.nsh ; MAKELONG
 
-
 ;Page custom nsDialogsWelcome
 Page Directory
 ;Page InstFiles
@@ -64,14 +63,10 @@ Section "Program files (Required)"
   WriteRegDWORD HKLM "${REGPATH_UNINSTSUBKEY}" "NoModify" 1
   WriteRegDWORD HKLM "${REGPATH_UNINSTSUBKEY}" "NoRepair" 1
 
-  ;!tempfile APP
-  ;File "/oname=$InstDir\MyApp.exe" "${APP}" ; Pretend that we have a real application to install
-  ;!delfile "${APP}"
   File "trusdx.bmp"
   File "truSDX Driver.dist\*.*"
+  File /R "SetupVSPE_32"
   File /R "Setup_vbcable"
-  File "Setup_com0com_x64.exe"
-  File "setup.cmd"
 SectionEnd
 
 Section "Start Menu shortcut"
@@ -92,35 +87,37 @@ Section -Uninstall
   RMDir "$InstDir"
   DeleteRegKey HKLM "${REGPATH_UNINSTSUBKEY}"
 
+  ExecWait '"sc.exe" stop EterlogicVspeService'
+  ExecWait '"sc.exe" delete EterlogicVspeService'
+  ExecWait '"$InstDir\SetupVSPE_32\WixInteractor.exe" on_uninstall'
+
+  Delete "$InstDir\SetupVSPE_32\*.*"
+  Delete "$InstDir\SetupVSPE_32"
+
+  Delete "$InstDir\Setup_vbcable\*.*"
+  RMDir "$InstDir\Setup_vbcable"
+
   ${UnpinShortcut} "$SMPrograms\${NAME}.lnk"
   Delete "$SMPrograms\${NAME}.lnk"
 SectionEnd
 
 Function PostInstall
-      MessageBox MB_OK "Now, VB-Audio Cable and COM0COM will be installed. Please select INSTALL DRIVER, and CLOSE the browser and continue with the COM0COM setup."
-
-	ExecWait '"$InstDir\Setup_vbcable\VBCABLE_Setup_x64.exe"'	
-	Delete "$InstDir\Setup_vbcable\*.*"
-	RMDir "$InstDir\Setup_vbcable"
-
-	ExecWait '"$InstDir\Setup_com0com_x64.exe" /S'
-	Delete "$InstDir\Setup_com0com_x64.exe"
-	
-	ExecWait '"$InstDir\setup.cmd"'
-	Delete "$InstDir\setup.cmd"
 	Delete "$InstDir\trusdx.bmp"
 
-	;MessageBox MB_YESNO|MB_ICONQUESTION "Reboot the system?" IDNO +2
-	;	${IF} ${IsWin7}
-	;		MessageBox MB_OK|MB_ICONQUESTION "'Rebooting... PRESS F8 and select: 'Disable Driver Signature Enforcement'  "
-	;		Reboot
-	;	${EndIf}
+	ExecWait '"$InstDir\SetupVSPE_32\WixInteractor.exe" on_install'
+    ExecWait '"$InstDir\SetupVSPE_32\EterlogicVspeService.exe" install "$InstDir\SetupVSPE_32\VSPEmulator.exe" "$InstDir\SetupVSPE_32\pair.vspe" "$LocalAppdata"'
+    ExecWait '"sc.exe" start EterlogicVspeService'
+	
+    MessageBox MB_OK "Now, VB-Audio Cable will be installed. Please select INSTALL DRIVER, and CLOSE the browser to finish the setup."
 
-	${IF} ${IsWin7}
-		MessageBox MB_OK|MB_ICONQUESTION "Now since com0com is not signed, REBOOT this way: Start Menu > Restart > F8 on boot > Disable driver signature enforc."
-	${Else}
-		MessageBox MB_OK|MB_ICONQUESTION "Now since com0com is not signed, REBOOT this way: Start Menu > Restart + hold SHIFT > Troubleshoot > Advanced options > Startup Settings > Restart > 7 Disable driver signature enforcement"
+	ExecWait '"$InstDir\Setup_vbcable\VBCABLE_Setup_x64.exe"'	
+	;Delete "$InstDir\Setup_vbcable\*.*"
+	;RMDir "$InstDir\Setup_vbcable"
+
+	${IfNot} ${AtLeastWin8}
+       MessageBox MB_OK "Unfortunatly this windows version is not supported by VSPE, download and install Virtual Serial Ports Emulator 0.937.4.747 for legacy OS systems, and create a COM8 COM9 pair."
 	${EndIf}
+
 	DetailPrint "Installation Finished"
 FunctionEnd
 

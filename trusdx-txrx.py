@@ -255,10 +255,7 @@ def run():
             ser2 = serial.Serial(loopback_serial_dev, 115200, write_timeout = 0)
         except Exception as e:
             if platform == "win32":
-                print("com0com not found: now since com0com is not signed, everytime REBOOT this way:")
-                print("  Win7:  Start Menu > Restart > F8 on boot > Disable driver signature enforc.")
-                print("  W8-11: Start Menu > Restart + hold SHIFT > Troubleshoot > Advanced options >")
-                print("         Startup Settings > Restart > 7 Disable driver signature enforcement")
+                print("VSPE virtual com port not found: reinstall or enable")
             else:
                 print("/dev/pts/x device not found")
         
