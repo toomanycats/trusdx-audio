@@ -23,7 +23,7 @@ Here is an screenshot of the setup in action:
 
 Make sure that the (tr)uSDX has firmware level [R2.00u](https://dl2man.de/wp-content/uploads/2022/01/wp.php/beta.html), or later.
 
-You'll need a Windows 8/10/11 or Linux PC (Raspberry PI should be fine, too) with PortAudio19, PulseAudio, Python 3 and extra libraries: `pyserial` and `pyaudio`.
+You'll need a Windows 8/10/11 or Linux PC (Raspberry PI should be fine, too).
 
 ## Installation Windows
 
@@ -51,7 +51,7 @@ Start a digital modes app (e.g WSJT-X) and select in Radio settings:
 ```
 sudo apt install portaudio19-dev python3
 python3 -m pip install --upgrade pip
-python3 -m pip install pyaudio
+python3 -m pip install pyaudio serial pyserial
 ```
 
 * Create a new virtual audio device:

@@ -9,7 +9,7 @@
 ###
 
 # Windows 7:
-# Install python3.6
+# Install python3.6 (32 bits version)
 # python -m pip install --upgrade pip
 # python -m pip install pyaudio   # or download and install the matching version from: https://www.lfd.uci.edu/~gohlke/pythonlibs/#pyaudio
 # python -m pip install pyaudio

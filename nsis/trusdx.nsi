@@ -14,6 +14,8 @@ InstallDirRegKey HKLM "${REGPATH_UNINSTSUBKEY}" "UninstallString"
 !include LogicLib.nsh
 !include Integration.nsh
 !include WinVer.nsh
+!include x64.nsh
+
 
 !include MUI.nsh
 !include nsDialogs.nsh
@@ -115,7 +117,11 @@ Function PostInstall
 
     MessageBox MB_OK "Now, VAC will be installed. Please select INSTALL to continue, you may ignore the browser page."
 
-	ExecWait '"$InstDir\Setup_vbcable\VBCABLE_Setup_x64.exe"'
+	${If} ${RunningX64}
+		ExecWait '"$InstDir\Setup_vbcable\VBCABLE_Setup_x64.exe"'
+	${Else}
+		ExecWait '"$InstDir\Setup_vbcable\VBCABLE_Setup.exe"'
+	${EndIf}
 	;Delete "$InstDir\Setup_vbcable\*.*"
 	;RMDir "$InstDir\Setup_vbcable"
 
