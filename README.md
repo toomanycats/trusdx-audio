@@ -25,9 +25,7 @@ Make sure that the (tr)uSDX has firmware level [R2.00u](https://dl2man.de/wp-con
 
 You'll need a Windows 8/10/11 or Linux PC (Raspberry PI should be fine, too) with PortAudio19, PulseAudio, Python 3 and extra libraries: `pyserial` and `pyaudio`.
 
-## Installation
-
-### Windows
+## Installation Windows
 
 * Download the .exe file from the [Releases page](https://github.com/threeme3/trusdx-audio/releases)
 
@@ -37,7 +35,7 @@ You'll need a Windows 8/10/11 or Linux PC (Raspberry PI should be fine, too) wit
 
 * Run from Start Menu the application: `truSDX Driver`
 
-* Start a digital modes app (e.g WSJT-X) and select in Radio settings:
+Start a digital modes app (e.g WSJT-X) and select in Radio settings:
 - Rig: Kendwood TS-480 (or 440 if not available)
 - Poll Interval: 80
 - Serial Port: COM8
@@ -45,24 +43,26 @@ You'll need a Windows 8/10/11 or Linux PC (Raspberry PI should be fine, too) wit
 - PTT Method:  either CAT, or DTR/RTS with port COM8
 - In Audio tab, select: for Input: `CABLE Output`, and for Output: `CABLE Input`
 
-### Linux
+## Installation Linux
 
 * Download `trusdx-txrx.py`
 
 * Install pre-requisites PortAudio, PulseAudio, Python 3 and extra libraries: `pyserial` and `pyaudio`, e.g:
 ```
 sudo apt install portaudio19-dev python3
-python -m pip install --upgrade pip
-python -m pip install pyaudio
+python3 -m pip install --upgrade pip
+python3 -m pip install pyaudio
 ```
 
-* Create a new virtual audio device: `pactl load-module module-null-sink sink_name=TRUSDX sink_properties=device.description="TRUSDX"`
+* Create a new virtual audio device:
+```pactl load-module module-null-sink sink_name=TRUSDX sink_properties=device.description="TRUSDX"```
 
-* Run the script in terminal: `trusdx-txrx.py`.
+* Run the script in terminal:
+```python3 trusdx-txrx.py -v```.
 
 * Use `pavucontrol` to assign the newly created `TRUSDX` audio device to the application you'd like to use for transmitting and receiving (or do that from the application itself, if it includes audio settings - WSJT-X does).
 
-* Start a digital modes app (e.g WSJT-X) and select in Radio settings:
+Start a digital modes app (e.g WSJT-X) and select in Radio settings:
 - Rig: Kendwood TS-480 (or 440 if not available)
 - Poll Interval: 80
 - Serial Port: /dev/pts/x  (lookup in terminal which /dev/pts port is offered)
@@ -73,7 +73,23 @@ python -m pip install pyaudio
 ## Notes
 This software is experimental, no warranty or service included.
 
-It is possible to enable detailed debug logging, enable VOX and influence RTS/DTR PTT method, changing block-size, unmute the rig. A list of avilable options can be listed:
+- The (tr)uSDX is muted by the driver, however if you like to hear the receiver audio you can add --unmute option (see below)
 
-Linux: trusdx-txrx.py --help
-Windows: truSDX Driver --help
+- The following options are available (for Windows use truSDX Driver.exe in Program Files directory):
+
+```
+usage: trusdx-txrx.py [-h] [-v] [--vox] [--unmute] [--no-rtsdtr] [-B BLOCK_SIZE]
+
+(tr)uSDX audio driver
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -v, --verbose         increase verbosity (default: False)
+  --vox                 VOX audio-triggered PTT (Linux only) (default: False)
+  --unmute              Enable (tr)usdx audio (default: False)
+  --no-rtsdtr           Disable RTS/DTR-triggered PTT (default: False)
+  -B BLOCK_SIZE, --block-size BLOCK_SIZE
+                        Block size (default: 512)
+```
+
+

@@ -184,7 +184,7 @@ def transmit_audio_via_serial(pastream, ser, cat):
         log("transmit_audio_via_serial_cat")
         while status[2]:
             handle_cat(pastream, ser, cat)
-            if(not config['no_rtsdtr']): handle_rts_dtr(ser, cat)
+            if(platform == "win32" and not config['no_rtsdtr']): handle_rts_dtr(ser, cat)
             if (status[0] or config['vox']) and pastream.get_read_available() > 0:    # in TX mode, and audio available
                 samples = pastream.read(config['block_size'], exception_on_overflow = False)
                 arr = array.array('h', samples)
