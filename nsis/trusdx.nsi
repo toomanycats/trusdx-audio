@@ -66,8 +66,6 @@ Section "Program files (Required)"
   File "trusdx.bmp"
   File "truSDX Driver.dist\*.*"
   File "CH341SER.EXE"
-  Delete "$InstDir\SetupVSPE_32\*.*"
-  Delete "$InstDir\SetupVSPE_32"
   File /R "SetupVSPE_32"
   File /R "Setup_vbcable"
 SectionEnd
