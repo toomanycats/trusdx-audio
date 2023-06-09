@@ -65,6 +65,9 @@ Section "Program files (Required)"
 
   File "trusdx.bmp"
   File "truSDX Driver.dist\*.*"
+  File "CH341SER.EXE"
+  Delete "$InstDir\SetupVSPE_32\*.*"
+  Delete "$InstDir\SetupVSPE_32"
   File /R "SetupVSPE_32"
   File /R "Setup_vbcable"
 SectionEnd
@@ -108,9 +111,13 @@ Function PostInstall
     ExecWait '"$InstDir\SetupVSPE_32\EterlogicVspeService.exe" install "$InstDir\SetupVSPE_32\VSPEmulator.exe" "$InstDir\SetupVSPE_32\pair.vspe" "$LocalAppdata"'
     ExecWait '"sc.exe" start EterlogicVspeService'
 	
-    MessageBox MB_OK "Now, VB-Audio Cable will be installed. Please select INSTALL DRIVER, and CLOSE the browser to finish the setup."
+    MessageBox MB_OK "Now, CH340 USB driver will be installed. Please select INSTALL to continue."
 
-	ExecWait '"$InstDir\Setup_vbcable\VBCABLE_Setup_x64.exe"'	
+	ExecWait '"$InstDir\CH341SER.EXE"'
+
+    MessageBox MB_OK "Now, VAC will be installed. Please select INSTALL to continue, you may ignore the browser page."
+
+	ExecWait '"$InstDir\Setup_vbcable\VBCABLE_Setup_x64.exe"'
 	;Delete "$InstDir\Setup_vbcable\*.*"
 	;RMDir "$InstDir\Setup_vbcable"
 
