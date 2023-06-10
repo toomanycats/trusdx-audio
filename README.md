@@ -27,16 +27,16 @@ You'll need a Windows 8/10/11 or Linux PC (Raspberry PI should be fine, too).
 
 ## Installation Windows
 
-* Download the .EXE file from the [Releases page](https://github.com/threeme3/trusdx-audio/releases)
+* Download the .EXE file from the [Releases page](https://github.com/threeme3/trusdx-audio/releases). Browser might warn about potential unsafe download, you can ignore this by selecting 'Keep'.
 
-* Run the setup and follow instructions. In case Windows Protection does not know the publisher, then seleect 'More Info' and 'Run Anyway'.
+* Run the setup and follow instructions. Again Windows Protection might give a warning, you can ignore by selecting 'More info' and 'Run anyway'.
 
 * Connect the (tr)uSDX to the USB port, set volume to 10
 
 * Run from Start Menu the application: `truSDX Driver`
 
 Start a digital modes app (e.g WSJT-X) and select in Radio settings:
-- Rig: Kendwood TS-480 (or 440 if not available)
+- Rig: Kendwood TS-480 (you can also use TS-440 if not available. You can also opt to not use any CAT control if you prefer)
 - Poll Interval: 80
 - Serial Port: COM8
 - Baud Rate: 115200
