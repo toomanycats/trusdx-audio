@@ -16,7 +16,7 @@ It has been successfully tested with:
 - Winlink (VARA)
 - UZ7HO SoundModem Packet Radio
 
-Here is an picture of the setup in action, a (tr)uSDX connected to Windows (tablet) PC, streaming CAT and audio:
+Here is an picture of the setup in action, a (tr)uSDX connected via USB to Windows (tablet) PC, streaming CAT and audio:
 ![screenshot](img/qso.jpg)
  
 ## Requirements
