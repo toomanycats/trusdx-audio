@@ -16,8 +16,8 @@ It has been successfully tested with:
 - Winlink (VARA)
 - UZ7HO SoundModem Packet Radio
 
-Here is an screenshot of the setup in action:
-![screenshot](img/screenshot.jpg)
+Here is an picture of the setup in action:
+![screenshot](img/qso.jpg)
  
 ## Requirements
 
