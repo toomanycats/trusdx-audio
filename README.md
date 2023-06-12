@@ -54,7 +54,7 @@ curl https://raw.githubusercontent.com/threeme3/trusdx-audio/main/trusdx-txrx.py
 ```
 sudo apt install pulseaudio portaudio19-dev python3 python3-pip
 python3 -m pip install --upgrade pip
-python3 -m pip install pyaudio serial pyserial
+python3 -m pip install pyaudio pyserial
 ```
 
 * Create a new virtual audio device:
