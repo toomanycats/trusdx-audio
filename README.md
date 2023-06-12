@@ -48,7 +48,7 @@ Start a digital modes app (e.g WSJT-X) and select in Radio settings:
 * Download `trusdx-txrx.py`
 ```
 curl https://raw.githubusercontent.com/threeme3/trusdx-audio/main/trusdx-txrx.py -o trusdx-txrx.py
-chmod a+x
+chmod a+x trusdx-txrx.py
 ```
 
 * Install pre-requisites PulseAudio, PortAudio, Python 3 and extra libraries: `pyserial` and `pyaudio`, e.g:
