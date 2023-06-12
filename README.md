@@ -53,7 +53,7 @@ chmod a+x trusdx-txrx.py
 
 * Install pre-requisites PulseAudio, PortAudio, Python 3 and extra libraries: `pyserial` and `pyaudio`, e.g:
 ```
-sudo apt install pulseaudio portaudio19-dev python3 python3-pip
+sudo apt install pulseaudio pavucontrol portaudio19-dev python3 python3-pip
 python3 -m pip install --upgrade pip
 python3 -m pip install pyaudio pyserial
 ```
