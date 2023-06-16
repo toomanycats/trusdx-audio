@@ -233,6 +233,12 @@ def run():
             show_serial_devices()
             print("Serial device = ", find_serial_device(trusdx_serial_dev) )
             print("Serial loopback = ", find_serial_device(loopback_serial_dev) )
+        
+        if platform == "win32":
+            if find_serial_device(loopback_serial_dev):
+                print(f"Conflict on COM port {loopback_serial_dev}: Go to Device Manager, select conflicting device and change COM port in advanced settings.")
+            if find_serial_device(cat_serial_dev):
+                print(f"Conflict on COM port {cat_serial_dev}: Go to Device Manager, select conflicting device and change COM port in advanced settings.")
 
         if platform != "win32":  # skip for Windows as we have com0com there
            _master1, slave1 = os.openpty()  # make a tty <-> tty device where one end is opened as serial device, other end by CAT app
