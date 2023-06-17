@@ -77,7 +77,7 @@ def receive_serial_audio(ser, cat, pastream):
     try:
         log("receive_serial_audio")
         bbuf = b''  # rest after ';' that cannot be handled
-        while True:
+        while status[2]:
             # below implements: d = ser.read_until(b';', 32)  #read until CAT end or enough in buf but only up to 32 bytes to keep response
             if(ser.in_waiting < 32): time.sleep(0.001)
             else:
@@ -88,8 +88,8 @@ def receive_serial_audio(ser, cat, pastream):
                 d = x[0] + b';' if cat_delim else x[0]
                 if status[1]:
                     #log(f"stream: {d}")
-                    #buf.append(d)                   # in CAT streaming mode: fwd to audio buf
-                    if not status[0]: pastream.write(d)
+                    buf.append(d)                   # in CAT streaming mode: fwd to audio buf
+                    #if not status[0]: pastream.write(d)  #  in CAT streaming mode: directly fwd to audio
                     if d[-1] == ord(';'):
                         status[1] = False           # go to CAT cmd mode when data ends with ';'
                         #log("***CAT mode")
@@ -104,6 +104,22 @@ def receive_serial_audio(ser, cat, pastream):
                             log(f"O: {d}")  # in CAT command mode
                         else:
                             log("Skip CAT response, as CAT is not active.")
+    except Exception as e:
+        log(e)
+        status[2] = False
+        if config['verbose']: raise
+
+def play_receive_audio(pastream):
+    try:
+        log("play_receive_audio")
+        while status[2]:
+            if len(buf) < 2:
+                #log(f"UNDERRUN #{urs[0]} - refilling")
+                urs[0] += 1
+                while len(buf) < 10:
+                    time.sleep(0.001)
+            if not status[0]: pastream.write(buf[0])
+            buf.remove(buf[0])
     except Exception as e:
         log(e)
         status[2] = False
@@ -280,6 +296,7 @@ def run():
         #status[1] = True
 
         threading.Thread(target=receive_serial_audio, args=(ser,ser2,out_stream)).start()
+        threading.Thread(target=play_receive_audio, args=(out_stream,)).start()
         threading.Thread(target=transmit_audio_via_serial, args=(in_stream,ser,ser2)).start()
 
         print(f"(tr)uSDX driver OK! Available devices = [{virtual_audio_dev_in}, {virtual_audio_dev_out}, {cat_serial_dev}]" )
