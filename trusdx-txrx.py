@@ -78,8 +78,15 @@ def receive_serial_audio(ser, cat, pastream):
         log("receive_serial_audio")
         bbuf = b''  # rest after ';' that cannot be handled
         while status[2]:
+            if status[0]:  # special case for TX
+                if(ser.in_waiting == 0): time.sleep(0.001)
+                else:
+                    d = ser.read()
+                    log(f"O: {d}")  # in TX CAT command mode
+                    cat.write(d)
+                    cat.flush()
             # below implements: d = ser.read_until(b';', 32)  #read until CAT end or enough in buf but only up to 32 bytes to keep response
-            if(ser.in_waiting < 32): time.sleep(0.001)
+            elif(ser.in_waiting < 32): time.sleep(0.001)   #normal case for RX
             else:
                 d = bbuf + ser.read(32)
                 x = d.split(b';', maxsplit=1)
@@ -143,6 +150,7 @@ def handle_vox(samples8, ser):
 def handle_rts_dtr(ser, cat):
     if not status[4] and (cat.cts or cat.dsr):
         status[4] = True    # keyed by RTS/DTR
+        status[1] = False
         status[0] = True
         #log("***TX mode")
         ser.write(b";TX0;")
@@ -177,6 +185,7 @@ def handle_cat(pastream, ser, cat):
         ser.flush()
         if d.startswith(b"TX"):
            status[0] = True
+           status[1] = False
            #log("***TX mode")
            pastream.stop_stream()
            pastream.start_stream()
@@ -311,7 +320,7 @@ def run():
     except KeyboardInterrupt:
         print("Stopping")
         status[2] = False
-        ser.write(b";UA0;")
+        #ser.write(b";UA0;")
 
     try:
         # clean-up
@@ -345,7 +354,7 @@ if __name__ == '__main__':
     parser.add_argument("--vox", action="store_true", default=False, help="VOX audio-triggered PTT (Linux only)")
     parser.add_argument("--unmute", action="store_true", default=False, help="Enable (tr)usdx audio")
     parser.add_argument("--no-rtsdtr", action="store_true", default=False, help="Disable RTS/DTR-triggered PTT")
-    parser.add_argument("-B", "--block-size", type=int, default=512, help="Block size")
+    parser.add_argument("-B", "--block-size", type=int, default=32, help="Block size")
     args = parser.parse_args()
     config = vars(args)
     if config['verbose']: print(config)
