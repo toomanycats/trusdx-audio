@@ -23,7 +23,7 @@ Here is an picture of the setup in action, a (tr)uSDX connected via USB to Windo
 
 Make sure that the (tr)uSDX has firmware level [R2.00u](https://dl2man.de/wp-content/uploads/2022/01/wp.php/beta.html), or later.
 
-You'll need a Windows 8/10/11 or Linux PC (Raspberry PI should be fine, too).
+You'll need a Windows 8/10/11 or Linux PC (Raspberry PI 3 or better should be fine, too).
 
 ## Installation Windows
 
@@ -59,7 +59,10 @@ python3 -m pip install pyaudio pyserial
 ```
 
 * Create a new virtual audio device:
-```pactl load-module module-null-sink sink_name=TRUSDX sink_properties=device.description="TRUSDX"```
+```
+sudo modprobe snd-aloop
+pactl load-module module-null-sink sink_name=TRUSDX sink_properties=device.description="TRUSDX"
+```
 
 * Run the script in terminal:
 ```python3 trusdx-txrx.py -v```.

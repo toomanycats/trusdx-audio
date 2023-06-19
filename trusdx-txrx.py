@@ -73,44 +73,53 @@ def find_serial_device(name, occurance = 0):
     result = [port.device for port in serial.tools.list_ports.comports() if name in port.description]
     return result[occurance] if len(result) else "" # return n-th matching device to name, "" for no match
 
+def handle_rx_audio(ser, cat, pastream, d):
+    if status[1]:
+        #log(f"stream: {d}")
+        if not status[0]: buf.append(d)                   # in CAT streaming mode: fwd to audio buf
+        #if not status[0]: pastream.write(d)  #  in CAT streaming mode: directly fwd to audio
+        if d[-1] == ord(';'):
+            status[1] = False           # go to CAT cmd mode when data ends with ';'
+            #log("***CAT mode")
+    else:
+        if d.startswith(b'US'):
+            #log("***US mode")
+            status[1] = True            # go to CAT stream mode when data starts with US
+        else:
+            if status[3]:               # only send something to cat port, when active
+                cat.write(d)
+                cat.flush()
+                log(f"O: {d}")  # in CAT command mode
+            else:
+                log("Skip CAT response, as CAT is not active.")
+
 def receive_serial_audio(ser, cat, pastream):
     try:
         log("receive_serial_audio")
         bbuf = b''  # rest after ';' that cannot be handled
         while status[2]:
-            if status[0]:  # special case for TX
-                if(ser.in_waiting == 0): time.sleep(0.001)
+            if False and status[0]:  # WORKAROUND: special case for TX; this is a workaround to handle CAT responses properly during TX
+                if(ser.in_waiting < 1): time.sleep(0.001)
                 else:
                     d = ser.read()
-                    log(f"O: {d}")  # in TX CAT command mode
-                    cat.write(d)
-                    cat.flush()
+                    #log(f"Q: {d}")  # in TX CAT command mode
+                    #cat.write(d)
+                    #cat.flush()
+                    handle_rx_audio(ser, cat, pastream, d)
             # below implements: d = ser.read_until(b';', 32)  #read until CAT end or enough in buf but only up to 32 bytes to keep response
-            elif(ser.in_waiting < config['tx_block_size']): time.sleep(0.001)   #normal case for RX
+            #elif(ser.in_waiting < config['tx_block_size']): time.sleep(0.001)   #normal case for RX
+            elif(ser.in_waiting == 0): time.sleep(0.001)   #normal case for RX
             else:
-                d = bbuf + ser.read(config['tx_block_size'])
+                #d = bbuf + ser.read(config['tx_block_size'])
+                d = bbuf + ser.read(ser.in_waiting)
                 x = d.split(b';', maxsplit=1)
                 cat_delim = (len(x) == 2)
                 bbuf = x[1] if cat_delim else b''
+                if not cat_delim and len(x[0]) < config['tx_block_size']:
+                    bbuf = x[0]
+                    continue
                 d = x[0] + b';' if cat_delim else x[0]
-                if status[1]:
-                    #log(f"stream: {d}")
-                    #buf.append(d)                   # in CAT streaming mode: fwd to audio buf
-                    if not status[0]: pastream.write(d)  #  in CAT streaming mode: directly fwd to audio
-                    if d[-1] == ord(';'):
-                        status[1] = False           # go to CAT cmd mode when data ends with ';'
-                        #log("***CAT mode")
-                else:
-                    if d.startswith(b'US'):
-                        #log("***US mode")
-                        status[1] = True            # go to CAT stream mode when data starts with US
-                    else:
-                        if status[3]:               # only send something to cat port, when active
-                            cat.write(d)
-                            cat.flush()
-                            log(f"O: {d}")  # in CAT command mode
-                        else:
-                            log("Skip CAT response, as CAT is not active.")
+                handle_rx_audio(ser, cat, pastream, d)
     except Exception as e:
         log(e)
         status[2] = False
@@ -132,6 +141,10 @@ def play_receive_audio(pastream):
         status[2] = False
         if config['verbose']: raise
 
+def tx_cat_delay(ser):
+    ser.flush()  # because trusdx TX buffers can be full, wait until all buffers are empty
+    time.sleep(0.003 + config['block_size']/audio_tx_rate) # time.sleep(0.01) and wait a bit before interrupting TX stream for a CAT cmd
+
 def handle_vox(samples8, ser):
     if (128 - min(samples8)) == 64 and (max(samples8) - 127) == 64: # if does contain very loud signal
         if not status[0]:
@@ -140,8 +153,7 @@ def handle_vox(samples8, ser):
             ser.write(b";TX0;")
             ser.flush()
     elif status[0]:  # in TX and no audio detected (silence)
-        ser.flush()  # because trusdx TX buffers can be full, wait until all buffers are empty
-        time.sleep(2*config['block_size']/audio_tx_rate) # time.sleep(0.01) and wait a bit before interrupting TX stream for a CAT cmd
+        tx_cat_delay(ser)
         ser.write(b";RX;")
         ser.flush()
         status[0] = False
@@ -150,14 +162,12 @@ def handle_vox(samples8, ser):
 def handle_rts_dtr(ser, cat):
     if not status[4] and (cat.cts or cat.dsr):
         status[4] = True    # keyed by RTS/DTR
-        status[1] = False   # force in CAT mode
         status[0] = True
         #log("***TX mode")
         ser.write(b";TX0;")
         ser.flush()
     elif status[4] and not (cat.cts or cat.dsr):  #if keyed by RTS/DTR
-        ser.flush()  # because trusdx TX buffers can be full, wait until all buffers are empty
-        time.sleep(2*config['block_size']/audio_tx_rate) # time.sleep(0.01) and wait a bit before interrupting TX stream for a CAT cmd
+        tx_cat_delay(ser)
         ser.write(b";RX;")
         ser.flush()
         status[4] = False
@@ -177,15 +187,14 @@ def handle_cat(pastream, ser, cat):
             return
         if status[0]:
             #log("***;")
-            ser.flush()  # because trusdx TX buffers can be full, wait until all buffers are empty
-            time.sleep(2*config['block_size']/audio_tx_rate) # time.sleep(0.01) and wait a bit before interrupting TX stream for a CAT cmd
+            tx_cat_delay(ser)
             ser.write(b";")  # in TX mode, interrupt CAT stream by sending ; before issuing CAT cmd
+            ser.flush()
         log(f"I: {d}")
         ser.write(d)                # fwd data on CAT port to trx
         ser.flush()
         if d.startswith(b"TX"):
            status[0] = True
-           status[1] = False        # force in CAT mode
            #log("***TX mode")
            pastream.stop_stream()
            pastream.start_stream()
@@ -243,6 +252,7 @@ def run():
            trusdx_serial_dev     = "USB Serial"
            loopback_serial_dev   = ""
            cat_serial_dev        = ""
+           alt_cat_serial_dev    = "/tmp/trusdx"
         elif platform == "win32":
            virtual_audio_dev_out = "CABLE Output"
            virtual_audio_dev_in  = "CABLE Input"
@@ -279,6 +289,9 @@ def run():
            threading.Thread(target=pty_echo, args=(master1,master2)).start()
            threading.Thread(target=pty_echo, args=(master2,master1)).start()
            cat_serial_dev = os.ttyname(slave1)
+           #if os.path.exists(alt_cat_serial_dev): os.remove(alt_cat_serial_dev)
+           #os.symlink(cat_serial_dev, alt_cat_serial_dev)
+           #print(f"Redirected {alt_cat_serial_dev} CAT port to driver.")
            loopback_serial_dev = os.ttyname(slave2)
         try:
             ser2 = serial.Serial(loopback_serial_dev, 115200, write_timeout = 0)
@@ -295,7 +308,7 @@ def run():
             if platform == "win32": print("VB-Audio CABLE not found: reinstall or enable")
             else:
                 print("port audio device not found: ")
-                print("  run in terminal: pactl load-module module-null-sink sink_name=TRUSDX sink_properties=device.description=\"TRUSDX\" && pavucontrol")
+                print("  run in terminal: pactl load-module module-null-sink sink_name=TRUSDX sink_properties=device.description=\"TRUSDX\" && pavucontrol  (hint: sudo modprobe snd-aloop)")
             raise
  
         try:
@@ -311,7 +324,7 @@ def run():
         #status[1] = True
 
         threading.Thread(target=receive_serial_audio, args=(ser,ser2,out_stream)).start()
-        #threading.Thread(target=play_receive_audio, args=(out_stream,)).start()
+        threading.Thread(target=play_receive_audio, args=(out_stream,)).start()
         threading.Thread(target=transmit_audio_via_serial, args=(in_stream,ser,ser2)).start()
 
         print(f"(tr)uSDX driver OK! Available devices = [{virtual_audio_dev_in}, {virtual_audio_dev_out}, {cat_serial_dev}]" )
@@ -361,8 +374,9 @@ if __name__ == '__main__':
     parser.add_argument("--unmute", action="store_true", default=False, help="Enable (tr)usdx audio")
     parser.add_argument("--direct", action="store_true", default=False, help="Use system audio devices (no loopback)")
     parser.add_argument("--no-rtsdtr", action="store_true", default=False, help="Disable RTS/DTR-triggered PTT")
-    parser.add_argument("-B", "--block-size", type=int, default=32, help="RX Block size")
-    parser.add_argument("-T", "--tx-block-size", type=int, default=32, help="TX Block size")
+    #parser.add_argument("-B", "--block-size", type=int, default=512 if platform == "win32" else 32, help="RX Block size")
+    parser.add_argument("-B", "--block-size", type=int, default=512, help="RX Block size")
+    parser.add_argument("-T", "--tx-block-size", type=int, default=48, help="TX Block size")
     args = parser.parse_args()
     config = vars(args)
     if config['verbose']: print(config)
