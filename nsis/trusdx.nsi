@@ -111,7 +111,7 @@ Function PostInstall
     ExecWait '"$InstDir\SetupVSPE_32\EterlogicVspeService.exe" install "$InstDir\SetupVSPE_32\VSPEmulator.exe" "$InstDir\SetupVSPE_32\pair.vspe" "$LocalAppdata"'
     ExecWait '"sc.exe" start EterlogicVspeService'
 	
-    MessageBox MB_OK "Now, CH340 USB driver will be installed. Please select INSTALL to continue."
+    MessageBox MB_OK "Now, CH340 USB driver will be installed. Please connect (tr)usdx to USB and select INSTALL to continue."
 
 	ExecWait '"$InstDir\CH341SER.EXE"'
 
