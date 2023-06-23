@@ -145,8 +145,9 @@ def play_receive_audio(pastream):
 def tx_cat_delay(ser):
     #ser.reset_output_buffer() # because trusdx TX buffers can be full, empty host buffers (but reset_output_buffer does not seem to work)
     ser.flush()  # because trusdx TX buffers can be full, wait until all buffers are empty
-    time.sleep(0.003 + config['block_size']/audio_tx_rate) # time.sleep(0.01) and wait a bit before interrupting TX stream for a CAT cmd
+    #time.sleep(0.003 + config['block_size']/audio_tx_rate) # time.sleep(0.01) and wait a bit before interrupting TX stream for a CAT cmd
     #time.sleep(0.0005 + 32/audio_tx_rate_trusdx) # and wait until trusdx buffers are read
+    time.sleep(0.010) # and wait a bit before interrupting TX stream for a CAT cmd
 
 def handle_vox(samples8, ser):
     if (128 - min(samples8)) == 64 and (max(samples8) - 127) == 64: # if does contain very loud signal
