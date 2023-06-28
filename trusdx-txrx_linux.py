@@ -25,11 +25,11 @@ urs = [0] # underrun counter
 
 # TODO: Make these a dict with nice keyword names.
 status = [
-          False, # tx_state
-          False, # cat_streaming_state
-          True,  # running
-          False, # cat_active
-          False  # keyed_by_rts_dtr
+          False, # 0 tx_state
+          False, # 1 cat_streaming_state
+          True,  # 2 running
+          False, # 3 cat_active
+          False  # 4 keyed_by_rts_dtr
           ]	
 
 virtual_audio_dev_out = '"#"TRUSDX'
@@ -38,6 +38,24 @@ trusdx_serial_dev     = "USB Serial"
 loopback_serial_dev   = ""
 cat_serial_dev        = ""
 alt_cat_serial_dev    = "/tmp/trusdx"
+
+def clean_up(slave1, slave2, ser, ser2):
+    print("Stopping")
+    time.sleep(1)   
+    if slave1:
+        os.close(slave1)
+    if slave2:
+        os.close(slave2)
+    if ser2:
+        ser2.close()
+    try:
+        if ser:
+            ser.write(b";UA0;")
+            ser.close()
+    except:
+        pass
+
+        py_audio.terminate()
 
 def show_audio_devices():
     for i in range(py_audio.get_device_count()):
@@ -55,7 +73,7 @@ def find_serial_device(name, occurance = 0):
     # return n-th matching device to name, "" for no match
     if len(result):
         return result[occurance]
-    else
+    else:
         return ""
 
 def handle_rx_audio(ser, cat, pastream, d):
@@ -240,29 +258,14 @@ def run():
                 time.sleep(1)
 
         except serial.serialutil.SerialException:
-            raise
+            raise Exception("Rig is not connected to USB port")
 
-        except Exception as e:
-            status[2] = False
-
-        finally:
-            print("Stopping")
-            status[2] = False
-            time.sleep(1)   
-            if slave1:
-                os.close(slave1)
-            if slave2:
-                os.close(slave2)
-            if ser2:
-                ser2.close()
-            try:
-                if ser:
-                    ser.write(b";UA0;")
-                    ser.close()
-            except:
-                pass
+        except KeyboardInterrupt:
+            self.clean_up(slave1, slave2, ser, ser2)
             
-            py_audio.terminate()
+        # Run with faults while waiting for the rig to connect.
+        except Exception:
+            status[2] = False
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="(tr)uSDX audio driver", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
