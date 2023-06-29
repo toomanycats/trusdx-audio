@@ -4,16 +4,18 @@
 # Also, most of the exceptions have been consolidated into one try/catch block.
 # I hope this had sped up the program and made it easier to read.
 
-import pyaudio
-import serial
-import serial.tools.list_ports
+from sys import exit, platform
+import os
 import threading
 import time
-import os
 import datetime
 import array
 import argparse
-from sys import platform
+import subprocess
+
+import pyaudio
+import serial
+import serial.tools.list_ports
 
 py_audio = pyaudio.PyAudio()
 
@@ -57,13 +59,14 @@ def clean_up(slave1, slave2, ser, ser2):
 
         py_audio.terminate()
 
-def show_audio_devices():
-    for i in range(py_audio.get_device_count()):
-        print(py_audio.get_device_info_by_index(i))
+def show_audio_sinks():
+    print("\n***Audio Sinks***\n")
+    cmd = "pactl list | grep 'Monitor of Sink'"
+    proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, encoding="ascii", errors="ignore")
+    output = proc.communicate()
+    for item in output:
+        print(item)
 
-    for i in range(py_audio.get_host_api_count()):
-        print(py_audio.get_host_api_info_by_index(i))
-        
 def show_serial_devices():
     for port in serial.tools.list_ports.comports():
         print(port)
@@ -269,16 +272,19 @@ def run():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="(tr)uSDX audio driver", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    parser.add_argument("-v", "--verbose", action="store_true", default=False, help="increase verbosity")
-    parser.add_argument("--vox", action="store_true", default=False, help="VOX audio-triggered PTT (Linux only)")
-    parser.add_argument("--unmute", action="store_true", default=False, help="Enable (tr)usdx audio")
-    parser.add_argument("--direct", action="store_true", default=False, help="Use system audio devices (no loopback)")
-    parser.add_argument("--no-rtsdtr", action="store_true", default=False, help="Disable RTS/DTR-triggered PTT")
+    parser.add_argument("-v", "--verbose", action="store_true", help="increase verbosity")
+    parser.add_argument("--unmute", action="store_true", help="Enable (tr)usdx audio")
+    parser.add_argument("--direct", action="store_true", help="Use system audio devices (no loopback)")
     parser.add_argument("-B", "--block-size", type=int, default=512, help="RX Block size")
     parser.add_argument("-T", "--tx-block-size", type=int, default=48, help="TX Block size")
+    parser.add_argument("--show-audio-sinks", dest="show_audio_sinks", action="store_true", help="Show audio devices detected.")
     args = parser.parse_args()
     config = vars(args)
     if config['verbose']:
         print(config)
+
+    if args.show_audio_sinks:
+        show_audio_sinks()
+        exit(0)
 
     run()
